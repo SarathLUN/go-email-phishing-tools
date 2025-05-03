@@ -26,3 +26,4 @@ Thumbs.db
 # SQLite database file (should not be committed)
 *.db
 *.db-*
+output-bin/
