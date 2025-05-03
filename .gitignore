@@ -1,0 +1,28 @@
+# Go build outputs
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+
+# Output directories
+/bin
+/vendor
+
+# IDE/Editor files
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Environment configuration
+.env
+
+# SQLite database file (should not be committed)
+*.db
+*.db-journal
