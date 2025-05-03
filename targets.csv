@@ -1,0 +1,9 @@
+full_name,email
+Alice Wonderland,alice@example.com
+Bob The Builder,bob@example.com
+Charlie Chaplin,charlie@example.com
+Alice Wonderland,alice@example.com  # Duplicate email for testing skip
+David Copperfield,david@example.com
+,emptyname@example.com             # Test empty name skip
+Eve Adams,eve@malformed-email     # Test malformed email skip
+Frank Sinatra,frank@example.com
