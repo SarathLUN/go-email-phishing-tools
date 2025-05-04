@@ -5,10 +5,13 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"github.com/SarathLUN/go-email-phishing-tools/internal/domain"
-	"github.com/SarathLUN/go-email-phishing-tools/internal/store"
 	"log"
 	"strings"
+	"time"
+
+	"github.com/SarathLUN/go-email-phishing-tools/internal/domain"
+	"github.com/SarathLUN/go-email-phishing-tools/internal/store"
+	"github.com/google/uuid"
 
 	"github.com/mattn/go-sqlite3"
 )
@@ -146,4 +149,80 @@ func (r *sqliteTargetRepository) FindByEmail(ctx context.Context, email string) 
 	target.UUID = parsedUUID
 
 	return &target, nil
+}
+
+// FindNonSent retrieves all targets where sent_at is NULL.
+func (r *sqliteTargetRepository) FindNonSent(ctx context.Context) ([]*domain.Target, error) {
+	query := `
+		SELECT uuid, full_name, email, created_at, updated_at, sent_at, clicked_at
+		FROM targets
+		WHERE sent_at IS NULL 
+		ORDER BY created_at ASC 
+	`
+	rows, err := r.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query non-sent targets: %w", err)
+	}
+	defer rows.Close()
+
+	targets := []*domain.Target{} // initialize empty slice
+	for rows.Next() {
+		var target domain.Target
+		var uuidStr string
+		// need to scan all columns returned by the query.
+		err := rows.Scan(
+			&uuidStr,
+			&target.FullName,
+			&target.Email,
+			&target.CreatedAt,
+			&target.UpdatedAt,
+			&target.SentAt,    // will scan as null if the DB value is null
+			&target.ClickedAt, // will scan as null if the DB value is null
+		)
+		if err != nil {
+			// Log error for the specific row and continue if possible, or return accumulated error
+			log.Printf("Error scanning target row: %v", err)
+			continue // Skip this row on scan error
+		}
+		// parse UUID string
+		parseUUID, parseErr := domain.ParseUUID(uuidStr)
+		if parseErr != nil {
+			log.Printf("Error parsing UUID '%s' from database for non-sent target: %v", uuidStr, parseErr)
+			continue // Skip row with invalid UUID
+		}
+		target.UUID = parseUUID
+		targets = append(targets, &target)
+	}
+	// check for errors encountered during iteration
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating non-sent target rows: %w", err)
+	}
+
+	return targets, nil
+}
+
+// MarkAsSent updates the sent_at timestamp for the target with the given UUID.
+// It relies on the database trigger to update 'updated_at'.
+func (r *sqliteTargetRepository) MarkAsSent(ctx context.Context, uuid uuid.UUID, sentTime time.Time) error {
+	query := `UPDATE targets SET sent_at = ? WHERE uuid = ?`
+	result, err := r.db.ExecContext(ctx, query, sentTime, uuid.String())
+	if err != nil {
+		return fmt.Errorf("failed to update sent_at for target UUID %s: %w", uuid.String(), err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		// Log this error but don't necessarily fail the operation if update succeeded
+		log.Printf("Warning: Could not get rows affected after marking target %s as sent: %v", uuid.String(), err)
+	} else if rowsAffected == 0 {
+		// This means the UUID didn't exist, which is unexpected here
+		// Return ErrNotFound or a specific error
+		log.Printf("Warning: Attempted to mark non-existent target UUID %s as sent.", uuid.String())
+		return fmt.Errorf("target UUID %s not found: %w", uuid.String(), store.ErrNotFound)
+	} else if rowsAffected > 1 {
+		// Should not happen with UUID as primary key
+		log.Printf("Warning: Expected 1 row affected but got %d for UUID %s", rowsAffected, uuid.String())
+	}
+
+	return nil
 }

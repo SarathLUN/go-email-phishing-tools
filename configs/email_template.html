@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>{{.Subject}}</title>
+</head>
+<body>
+    <p>Dear {{.FullName}},</p>
+
+    <p>As part of our ongoing commitment to security, we require all users to verify their account activity. Please review your recent access logs by clicking the link below:</p>
+
+    <p><a href="{{.TrackingLink}}">Verify Account Activity Now</a></p>
+
+    <p>If you do not verify your activity within 24 hours, your account access may be temporarily restricted.</p>
+
+    <p>Thank you for your cooperation.</p>
+
+    <p>Sincerely,<br>
+    The Security Team</p>
+
+    <style>
+        body { font-family: sans-serif; line-height: 1.6; }
+        a { color: #007bff; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+    </style>
+</body>
+</html>

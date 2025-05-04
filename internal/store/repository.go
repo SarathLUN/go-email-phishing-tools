@@ -2,7 +2,10 @@ package store
 
 import (
 	"context"
+	"time"
+
 	"github.com/SarathLUN/go-email-phishing-tools/internal/domain" // Make sure the module path is correct
+	"github.com/google/uuid"
 )
 
 // TargetRepository defines the operations for persisting and retrieving Target data.
@@ -14,6 +17,13 @@ type TargetRepository interface {
 	// FindByEmail checks if a target with the given email exists.
 	FindByEmail(ctx context.Context, email string) (*domain.Target, error)
 	// Add methods for Stage 2 later (e.g., FindNonSent, MarkAsSent)
+
+	// --- new methods for stage 2 ---
+	// FindNonSend retrieves all targets that have not yet been sent and email (sent_at IS NULL)
+	FindNonSent(ctx context.Context) ([]*domain.Target, error)
+
+	// MarkAsSent updates the sent_at timestamp for a given target UUID.
+	MarkAsSent(ctx context.Context, uuid uuid.UUID, sentTime time.Time) error
 }
 
 // Add other repository interfaces here if needed (e.g., CampaignRepository)

@@ -6,11 +6,15 @@ import (
 	"github.com/SarathLUN/go-email-phishing-tools/internal/config"
 	"github.com/SarathLUN/go-email-phishing-tools/internal/csvutil" // Adjust module path
 	"github.com/SarathLUN/go-email-phishing-tools/internal/domain"  // Adjust module path
-	"github.com/SarathLUN/go-email-phishing-tools/internal/store"   // Adjust module path
+	"github.com/SarathLUN/go-email-phishing-tools/internal/email"
+	"github.com/SarathLUN/go-email-phishing-tools/internal/store" // Adjust module path
 	"github.com/SarathLUN/go-email-phishing-tools/internal/store/sqlite"
 	"github.com/joho/godotenv"
 	"log"
+	"net/url"
 	"os"
+	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -48,11 +52,11 @@ func init() {
 
 	// Add subcommands
 	addImportCommand()
-	// Add other commands (send, serve) here later
+	addSendCommand()        // *** ADD THIS CALL ***
+	addPrintDbPathCommand() // Add other commands (serve) here later
 }
 
 // --- Import Command Implementation ---
-
 func addImportCommand() {
 	var importCmd = &cobra.Command{
 		Use:   "import <csv_file_path>",
@@ -138,7 +142,7 @@ func getEnv(key, fallback string) string {
 }
 
 // Add print-db-path command for goose helper
-func init() {
+func addPrintDbPathCommand() {
 	var printDbPathCmd = &cobra.Command{
 		Use:    "print-db-path",
 		Short:  "Prints the database path based on config (for goose)",
@@ -150,4 +154,158 @@ func init() {
 		},
 	}
 	rootCmd.AddCommand(printDbPathCmd)
+}
+
+// --- Send Command Implementation ---
+
+func addSendCommand() {
+	var sendCmd = &cobra.Command{
+		Use:   "send",
+		Short: "Send phishing simulation emails to non-sent targets",
+		Long: `Finds all targets in the database that have not yet received the simulation
+email (sent_at is NULL) and sends them a personalized email using the configured
+template and SMTP server. Updates the sent_at timestamp upon success.`,
+		Args: cobra.NoArgs, // No arguments needed for this command
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Load configuration
+			cfg, err := config.LoadConfig(cfgFile)
+			if err != nil {
+				return fmt.Errorf("failed to load configuration: %w", err)
+			}
+
+			// --- Validate required Send config ---
+			if cfg.SMTPUser == "" || cfg.SMTPPassword == "" || cfg.SMTPSenderAddress == "" {
+				return fmt.Errorf("SMTP configuration (SMTP_USER, SMTP_PASSWORD, SMTP_SENDER_ADDRESS) is incomplete in config. Cannot send emails")
+			}
+			if cfg.EmailTemplatePath == "" {
+				return fmt.Errorf("email template path (EMAIL_TEMPLATE_PATH) is not configured")
+			}
+			if _, err := os.Stat(cfg.EmailTemplatePath); os.IsNotExist(err) {
+				return fmt.Errorf("email template file not found at path: %s", cfg.EmailTemplatePath)
+			}
+			if cfg.TrackerBaseURL == "" {
+				return fmt.Errorf("tracker base URL (TRACKER_BASE_URL) is not configured")
+			}
+
+			// Initialize dependencies (DB, Repo, Email Sender)
+			db, err := sqlite.ConnectDB(cfg.DBPath)
+			if err != nil {
+				return fmt.Errorf("failed to connect to database: %w", err)
+			}
+			defer db.Close()
+
+			var targetRepo store.TargetRepository
+			targetRepo = sqlite.NewSQLiteTargetRepository(db)
+
+			emailSender, err := email.NewGmailSender(cfg) // Initialize sender
+			if err != nil {
+				return fmt.Errorf("failed to initialize email sender: %w", err)
+			}
+
+			// --- Command Logic ---
+			log.Println("Starting email sending process...")
+			ctx := context.Background()
+
+			// 1. Find non-sent targets
+			targets, err := targetRepo.FindNonSent(ctx)
+			if err != nil {
+				return fmt.Errorf("failed to retrieve non-sent targets: %w", err)
+			}
+
+			if len(targets) == 0 {
+				log.Println("No targets found awaiting emails. Nothing to do.")
+				return nil
+			}
+
+			log.Printf("Found %d targets to send emails to.", len(targets))
+
+			// 2. Iterate and send
+			successCount := 0
+			failCount := 0
+			for _, target := range targets {
+				log.Printf("Processing target: %s (%s)", target.FullName, target.Email)
+
+				// Construct unique tracking link
+				trackingLink, err := buildTrackingLink(cfg.TrackerBaseURL, target.UUID.String())
+				if err != nil {
+					log.Printf("ERROR: Failed to build tracking link for %s (%s): %v. Skipping.", target.FullName, target.Email, err)
+					failCount++
+					continue // Skip this target
+				}
+
+				// Prepare template data
+				templateData := email.EmailTemplateData{
+					FullName:     target.FullName,
+					TrackingLink: trackingLink,
+					// Subject could also be dynamic if needed
+				}
+
+				// Send email
+				err = emailSender.Send(target.Email, target.FullName, cfg.EmailSubject, templateData)
+				if err != nil {
+					log.Printf("ERROR: Failed to send email to %s (%s): %v", target.FullName, target.Email, err)
+					failCount++
+					continue // Skip marking as sent if email failed
+				}
+
+				// Mark as sent in DB
+				sentTime := time.Now()
+				err = targetRepo.MarkAsSent(ctx, target.UUID, sentTime)
+				if err != nil {
+					// CRITICAL: Email sent but DB update failed. Log prominently.
+					log.Printf("CRITICAL ERROR: Email sent to %s (%s) but failed to mark as sent in DB (UUID: %s): %v", target.FullName, target.Email, target.UUID, err)
+					// Technically counted as success because email went out, but state is inconsistent.
+					// Consider how to handle this - maybe retry DB update later? For now, log and count success.
+					// Let's count as failure for reporting consistency, as the process didn't fully complete.
+					failCount++
+					// successCount++ // Or count success but log critical error
+				} else {
+					log.Printf("Successfully processed and marked target %s (%s) as sent.", target.FullName, target.Email)
+					successCount++
+				}
+
+				// Optional: Add a small delay between emails to avoid rate limiting
+				// time.Sleep(500 * time.Millisecond)
+			}
+
+			log.Println("--------------------------------------------------")
+			log.Printf("Email Sending Summary:")
+			log.Printf("  Targets processed: %d", len(targets))
+			log.Printf("  Successfully sent: %d", successCount)
+			log.Printf("  Failed/Skipped:    %d", failCount)
+			log.Println("--------------------------------------------------")
+
+			return nil
+		},
+	}
+	rootCmd.AddCommand(sendCmd)
+}
+
+// Helper function to build the tracking link safely
+func buildTrackingLink(baseURL, uuid string) (string, error) {
+	base, err := url.Parse(baseURL)
+	if err != nil {
+		return "", fmt.Errorf("invalid TRACKER_BASE_URL '%s': %w", baseURL, err)
+	}
+
+	// Ensure the path ends with a slash if not empty, for proper joining
+	if base.Path != "" && !strings.HasSuffix(base.Path, "/") {
+		base.Path += "/"
+	}
+	// Define the tracking endpoint path
+	trackingPath := "track" // Or make this configurable?
+
+	// Add query parameter
+	query := base.Query()
+	query.Set("id", uuid) // Use 'id' as the parameter name
+
+	// Reconstruct URL - JoinPath is safer for paths
+	finalURL, err := url.JoinPath(baseURL, trackingPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to join path '%s' to base URL '%s': %w", trackingPath, baseURL, err)
+	}
+
+	finalURL += "?" + query.Encode() // Append query string
+
+	return finalURL, nil
 }
