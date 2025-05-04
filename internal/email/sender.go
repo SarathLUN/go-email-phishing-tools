@@ -58,10 +58,12 @@ func (s *gmailSender) Send(toEmail, toName, subject string, templateData EmailTe
 	// Use RFC 5322 standard format for headers
 	headers := make(map[string]string)
 	headers["From"] = s.cfg.SMTPSenderAddress
+	//headers["From"] = "HR Department"
 	headers["To"] = toEmail // Can use fmt.Sprintf("%s <%s>", toName, toEmail) if desired
 	headers["Subject"] = subject
 	headers["MIME-Version"] = "1.0"
 	headers["Content-Type"] = "text/html; charset=UTF-8"
+	headers["List-Unsubscribe"] = "<mailto:no-reply@passapptech.com?subject=unsubscribe>"
 
 	message := ""
 	for k, v := range headers {

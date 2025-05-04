@@ -264,8 +264,8 @@ template and SMTP server. Updates the sent_at timestamp upon success.`,
 					successCount++
 				}
 
-				// Optional: Add a small delay between emails to avoid rate limiting
-				// time.Sleep(500 * time.Millisecond)
+				// Add delay
+				time.Sleep(1 * time.Second) // Send one email per second (adjust as needed)
 			}
 
 			log.Println("--------------------------------------------------")
@@ -293,7 +293,7 @@ func buildTrackingLink(baseURL, uuid string) (string, error) {
 		base.Path += "/"
 	}
 	// Define the tracking endpoint path
-	trackingPath := "track" // Or make this configurable?
+	trackingPath := "feedback" // Or make this configurable?
 
 	// Add query parameter
 	query := base.Query()
