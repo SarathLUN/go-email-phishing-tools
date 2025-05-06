@@ -24,6 +24,9 @@ type TargetRepository interface {
 
 	// MarkAsSent updates the sent_at timestamp for a given target UUID.
 	MarkAsSent(ctx context.Context, uuid uuid.UUID, sentTime time.Time) error
-}
 
-// Add other repository interfaces here if needed (e.g., CampaignRepository)
+	// --- New method for Stage 3 ---
+	// MarkAsClicked updates the clicked_at timestamp for a given target UUID,
+	// only if clicked_at is currently NULL. Returns true if the row was updated.
+	MarkAsClicked(ctx context.Context, uuid uuid.UUID, clickedTime time.Time) (bool, error)
+}

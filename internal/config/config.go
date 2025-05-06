@@ -9,17 +9,18 @@ import (
 )
 
 type Config struct {
-	DBPath            string
-	SMTPHost          string
-	SMTPPort          int
-	SMTPUser          string
-	SMTPPassword      string
-	SMTPSenderAddress string
-	TrackerHost       string
-	TrackerPort       int
-	TrackerBaseURL    string
-	EmailSubject      string
-	EmailTemplatePath string
+	DBPath                string
+	SMTPHost              string
+	SMTPPort              int
+	SMTPUser              string
+	SMTPPassword          string
+	SMTPSenderAddress     string
+	TrackerHost           string
+	TrackerPort           int
+	TrackerBaseURL        string
+	EmailSubject          string
+	EmailTemplatePath     string
+	RedirectURLAfterClick string
 }
 
 func LoadConfig(path string) (*Config, error) {
@@ -49,17 +50,18 @@ func LoadConfig(path string) (*Config, error) {
 	}
 
 	cfg := &Config{
-		DBPath:            getEnv("DB_PATH", "./phishing_simulation.db"),
-		SMTPHost:          getEnv("SMTP_HOST", "smtp.gmail.com"),
-		SMTPPort:          smtpPort,
-		SMTPUser:          getEnv("SMTP_USER", ""),
-		SMTPPassword:      getEnv("SMTP_PASSWORD", ""),
-		SMTPSenderAddress: getEnv("SMTP_SENDER_ADDRESS", ""),
-		TrackerHost:       getEnv("TRACKER_HOST", "localhost"),
-		TrackerPort:       trackerPort,
-		TrackerBaseURL:    getEnv("TRACKER_BASE_URL", "http://localhost:"+trackerPortStr),
-		EmailSubject:      getEnv("EMAIL_SUBJECT", "Important Security Update"),
-		EmailTemplatePath: getEnv("EMAIL_TEMPLATE_PATH", "./configs/email_template.html"),
+		DBPath:                getEnv("DB_PATH", "./phishing_simulation.db"),
+		SMTPHost:              getEnv("SMTP_HOST", "smtp.gmail.com"),
+		SMTPPort:              smtpPort,
+		SMTPUser:              getEnv("SMTP_USER", ""),
+		SMTPPassword:          getEnv("SMTP_PASSWORD", ""),
+		SMTPSenderAddress:     getEnv("SMTP_SENDER_ADDRESS", ""),
+		TrackerHost:           getEnv("TRACKER_HOST", "localhost"),
+		TrackerPort:           trackerPort,
+		TrackerBaseURL:        getEnv("TRACKER_BASE_URL", "http://localhost:"+trackerPortStr),
+		EmailSubject:          getEnv("EMAIL_SUBJECT", "Important Security Update"),
+		EmailTemplatePath:     getEnv("EMAIL_TEMPLATE_PATH", "./configs/email_template.html"),
+		RedirectURLAfterClick: getEnv("REDIRECT_URL_AFTER_CLICK", "https://www.google.com"), // <-- Load New Value
 	}
 
 	// Basic validation for critical SMTP settings for later stages

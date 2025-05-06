@@ -226,3 +226,40 @@ func (r *sqliteTargetRepository) MarkAsSent(ctx context.Context, uuid uuid.UUID,
 
 	return nil
 }
+
+// MarkAsClicked updates the clicked_at timestamp for the target with the given UUID,
+// only if clicked_at is currently NULL. It relies on the database trigger to update 'updated_at'.
+// Returns true if the clicked_at field was updated, false otherwise (e.g., already clicked or not found).
+func (r *sqliteTargetRepository) MarkAsClicked(ctx context.Context, uuid uuid.UUID, clickedTime time.Time) (bool, error) {
+	query := `UPDATE targets SET clicked_at = ? WHERE uuid = ? AND clicked_at IS NULL`
+	result, err := r.db.ExecContext(ctx, query, clickedTime, uuid.String())
+	if err != nil {
+		return false, fmt.Errorf("failed to update clicked_at for target UUID %s: %w", uuid.String(), err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		// This is an error in fetching RowsAffected, not necessarily in the update itself if it happened.
+		// Log it, but base success on rowsAffected if available.
+		log.Printf("Warning: Could not get rows affected after marking target %s as clicked: %v", uuid.String(), err)
+		// Consider returning the error if critical, or false if rowsAffected might still be zero.
+		// For simplicity, if we can't get RowsAffected, assume update might not have occurred as expected.
+		return false, fmt.Errorf("failed to get rows affected for clicked_at update (UUID: %s): %w", uuid.String(), err)
+	}
+
+	if rowsAffected == 0 {
+		// This could mean the UUID doesn't exist OR clicked_at was already set.
+		// We can't distinguish without another query, but for this function's contract,
+		// it means clicked_at was not newly updated.
+		log.Printf("Target UUID %s not updated (either not found or already clicked).", uuid.String())
+		return false, nil // Not an error per se, just no update occurred.
+	}
+	if rowsAffected > 1 {
+		// Should not happen with UUID as primary key
+		log.Printf("CRITICAL: Expected 0 or 1 row affected for click tracking but got %d for UUID %s", rowsAffected, uuid.String())
+		// This is a more serious issue.
+		return true, fmt.Errorf("unexpected number of rows affected (%d) for click tracking (UUID: %s)", rowsAffected, uuid.String())
+	}
+
+	return true, nil // Update occurred
+}
