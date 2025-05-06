@@ -52,8 +52,8 @@ func init() {
 
 	// Add subcommands
 	addImportCommand()
-	addSendCommand()        // *** ADD THIS CALL ***
-	addPrintDbPathCommand() // Add other commands (serve) here later
+	addSendCommand()
+	addPrintDbPathCommand()
 }
 
 // --- Import Command Implementation ---
@@ -144,13 +144,13 @@ func getEnv(key, fallback string) string {
 // Add print-db-path command for goose helper
 func addPrintDbPathCommand() {
 	var printDbPathCmd = &cobra.Command{
-		Use:    "print-db-path",
-		Short:  "Prints the database path based on config (for goose)",
-		Args:   cobra.NoArgs,
-		Hidden: true, // Hide this utility command from standard help
+		Use:   "print-db-path",
+		Short: "Prints the database path based on config (for goose)",
+		Args:  cobra.NoArgs,
+		//Hidden: true, // Hide this utility command from standard help
 		Run: func(cmd *cobra.Command, args []string) {
 			// Use the global --config flag if provided
-			fmt.Print(GetDBPathFromConfig(cfgFile))
+			fmt.Println(GetDBPathFromConfig(cfgFile))
 		},
 	}
 	rootCmd.AddCommand(printDbPathCmd)
