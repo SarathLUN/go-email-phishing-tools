@@ -5,6 +5,8 @@
 *.so
 *.dylib
 *.test
+output-bin/
+build/
 
 # Output directories
 /bin
@@ -26,4 +28,3 @@ Thumbs.db
 # SQLite database file (should not be committed)
 *.db
 *.db-*
-output-bin/
